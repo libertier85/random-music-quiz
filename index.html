@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>랜덤 플레이 뮤직 퀴즈</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="control-panel" aria-labelledby="app-title">
+        <div class="title-block">
+          <p class="eyebrow">Car Music Quiz</p>
+          <h1 id="app-title">랜덤 플레이 뮤직 퀴즈</h1>
+          <p class="app-version" id="app-version">v0.6.9 · fill-requested-count</p>
+        </div>
+
+        <form class="settings" id="quiz-settings">
+          <fieldset>
+            <legend>음원 연결</legend>
+            <div class="spotify-panel" id="spotify-panel">
+              <label>
+                Spotify Client ID
+                <input
+                  id="spotify-client-id"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="Spotify Developer Dashboard의 Client ID"
+                />
+              </label>
+              <div class="spotify-actions">
+                <button type="button" id="save-spotify-client">저장</button>
+                <button type="button" id="connect-spotify">Spotify 로그인</button>
+                <button type="button" id="retry-spotify-player" hidden>플레이어 다시 준비</button>
+                <button type="button" id="diagnose-spotify" hidden>연결 진단</button>
+                <button type="button" id="disconnect-spotify" hidden>로그아웃</button>
+              </div>
+              <p id="spotify-status">Spotify 연결 전입니다.</p>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>재생 위치</legend>
+            <div class="segmented-control" role="radiogroup" aria-label="재생 위치">
+              <label>
+                <input type="radio" name="playFrom" value="highlight" checked />
+                <span>하이라이트</span>
+              </label>
+              <label>
+                <input type="radio" name="playFrom" value="beginning" />
+                <span>처음부터</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>카테고리</legend>
+            <div class="category-groups">
+              <div class="category-group">
+                <p>국가/언어</p>
+                <div class="chip-grid">
+                  <label><input type="checkbox" name="category" value="korea" checked /><span>한국</span></label>
+                  <label><input type="checkbox" name="category" value="japan" /><span>일본</span></label>
+                  <label><input type="checkbox" name="category" value="western" /><span>영미권</span></label>
+                  <label><input type="checkbox" name="category" value="global" /><span>글로벌</span></label>
+                </div>
+              </div>
+
+              <div class="category-group">
+                <p>인기/차트</p>
+                <div class="chip-grid">
+                  <label><input type="checkbox" name="category" value="korea-top100" /><span>한국 Top 100</span></label>
+                  <label><input type="checkbox" name="category" value="shorts-challenge" /><span>쇼츠/챌린지</span></label>
+                </div>
+              </div>
+
+              <div class="category-group">
+                <p>음악 스타일</p>
+                <div class="chip-grid style-grid">
+                  <label><input type="checkbox" name="category" value="dance" checked /><span>댄스</span></label>
+                  <label><input type="checkbox" name="category" value="ballad" /><span>발라드</span></label>
+                  <label><input type="checkbox" name="category" value="rock" /><span>락</span></label>
+                  <label><input type="checkbox" name="category" value="hiphop" /><span>힙합/랩</span></label>
+                  <label><input type="checkbox" name="category" value="rnb" /><span>R&B</span></label>
+                  <label><input type="checkbox" name="category" value="electronic" /><span>일렉트로닉</span></label>
+                  <label><input type="checkbox" name="category" value="trot" /><span>트로트</span></label>
+                  <label><input type="checkbox" name="category" value="indie" /><span>인디</span></label>
+                  <label><input type="checkbox" name="category" value="ost" /><span>OST</span></label>
+                  <label><input type="checkbox" name="category" value="anime" /><span>애니송</span></label>
+                </div>
+              </div>
+
+              <div class="category-group">
+                <p>아티스트</p>
+                <div class="chip-grid">
+                  <label><input type="checkbox" name="category" value="girl-group" /><span>걸그룹</span></label>
+                  <label><input type="checkbox" name="category" value="boy-group" /><span>보이그룹</span></label>
+                  <label><input type="checkbox" name="category" value="female-solo" /><span>여성 솔로</span></label>
+                  <label><input type="checkbox" name="category" value="male-solo" /><span>남성 솔로</span></label>
+                  <label><input type="checkbox" name="category" value="band" /><span>밴드</span></label>
+                  <label><input type="checkbox" name="category" value="mixed-duo" /><span>혼성/듀오</span></label>
+                </div>
+              </div>
+
+              <div class="category-group year-picker">
+                <p>연도</p>
+                <div class="year-presets" aria-label="연도 빠른 선택">
+                  <button type="button" data-recent-months="6">최신곡</button>
+                  <button type="button" data-year-start="2020" data-year-end="2026">2020년대</button>
+                  <button type="button" data-year-start="2010" data-year-end="2019">2010년대</button>
+                  <button type="button" data-year-start="2000" data-year-end="2009">2000년대</button>
+                  <button type="button" data-year-start="1990" data-year-end="1999">1990년대</button>
+                  <button type="button" data-year-start="1990" data-year-end="2026">전체</button>
+                </div>
+
+                <div class="segmented-control compact" role="radiogroup" aria-label="연도 선택 방식">
+                  <label>
+                    <input type="radio" name="yearMode" value="range" checked />
+                    <span>범위</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="yearMode" value="direct" />
+                    <span>직접 선택</span>
+                  </label>
+                </div>
+
+                <div class="year-range" id="year-range-panel">
+                  <label>
+                    시작 연도
+                    <select id="year-start"></select>
+                  </label>
+                  <span aria-hidden="true">~</span>
+                  <label>
+                    끝 연도
+                    <select id="year-end"></select>
+                  </label>
+                </div>
+
+                <div class="year-direct-panel" id="year-direct-panel" hidden>
+                  <div class="chip-grid year-grid" id="year-direct-grid"></div>
+                </div>
+
+                <p class="year-summary" id="year-summary">2024년부터 2026년까지</p>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="settings-grid">
+            <label>
+              재생 길이
+              <select id="play-duration">
+                <option value="10">10초</option>
+                <option value="30" selected>30초</option>
+                <option value="60">1분</option>
+                <option value="full">전곡</option>
+              </select>
+            </label>
+
+            <label>
+              쉬는 시간
+              <select id="break-seconds">
+                <option value="1">1초</option>
+                <option value="5" selected>5초</option>
+                <option value="10">10초</option>
+              </select>
+            </label>
+
+            <label>
+              총 곡 수
+              <input id="song-count" type="number" min="1" max="20" value="5" />
+            </label>
+          </div>
+
+          <button class="primary-button" type="submit">퀴즈 시작</button>
+        </form>
+      </section>
+
+      <section class="player-panel" aria-live="polite">
+        <div class="round-status">
+          <span id="round-label">대기 중</span>
+          <strong id="timer-label">00:00</strong>
+        </div>
+
+        <div class="source-status" id="source-status">
+          Spotify를 연결하면 실제 음원을 재생합니다.
+        </div>
+
+        <div class="now-playing">
+          <p id="mode-label">하이라이트부터 재생</p>
+          <div class="disc" aria-hidden="true"></div>
+          <h2 id="question-label">설정을 고르고 퀴즈를 시작하세요</h2>
+          <p id="answer-label" class="answer hidden"></p>
+        </div>
+
+        <div class="player-actions">
+          <button type="button" id="toggle-answer">정답 보기</button>
+          <button type="button" id="toggle-playback" disabled>시작</button>
+          <button type="button" id="next-song">다음 곡</button>
+        </div>
+
+        <div class="harness-log">
+          <div class="harness-header">
+            <h3>재생 하네스</h3>
+            <button type="button" id="run-category-qa">카테고리 QA</button>
+          </div>
+          <ol id="harness-log"></ol>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js?v=fill-requested-count"></script>
+  </body>
+</html>
