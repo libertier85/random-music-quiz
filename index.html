@@ -12,7 +12,7 @@
         <div class="title-block">
           <p class="eyebrow">Car Music Quiz</p>
           <h1 id="app-title">랜덤 플레이 뮤직 퀴즈</h1>
-          <p class="app-version" id="app-version">v0.8.2 · quiz-results</p>
+          <p class="app-version" id="app-version">v0.8.3 · redirect-helper</p>
         </div>
 
         <form class="settings" id="quiz-settings">
@@ -35,6 +35,13 @@
                 <button type="button" id="retry-spotify-player" hidden>플레이어 다시 준비</button>
                 <button type="button" id="diagnose-spotify" hidden>연결 진단</button>
                 <button type="button" id="disconnect-spotify" hidden>로그아웃</button>
+              </div>
+              <div class="redirect-helper">
+                <label>
+                  현재 Redirect URI
+                  <input id="spotify-redirect-uri" type="text" readonly />
+                </label>
+                <button type="button" id="copy-redirect-uri">복사</button>
               </div>
               <p id="spotify-status">Spotify 연결 전입니다.</p>
             </div>
@@ -245,6 +252,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=quiz-results"></script>
+    <script src="./app.js?v=redirect-helper"></script>
   </body>
 </html>

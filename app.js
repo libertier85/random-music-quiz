@@ -1,7 +1,7 @@
 const YEAR_START = 1990;
 const YEAR_END = 2026;
-const APP_VERSION = "0.8.2";
-const APP_BUILD = "quiz-results";
+const APP_VERSION = "0.8.3";
+const APP_BUILD = "redirect-helper";
 const RECENT_MONTHS = 6;
 const SPOTIFY_SEARCH_BATCH_SIZE = 2;
 const SPOTIFY_REQUEST_TIMEOUT_MS = 8_000;
@@ -275,6 +275,8 @@ const connectSpotifyButton = document.querySelector("#connect-spotify");
 const retrySpotifyPlayerButton = document.querySelector("#retry-spotify-player");
 const diagnoseSpotifyButton = document.querySelector("#diagnose-spotify");
 const disconnectSpotifyButton = document.querySelector("#disconnect-spotify");
+const spotifyRedirectUriInput = document.querySelector("#spotify-redirect-uri");
+const copyRedirectUriButton = document.querySelector("#copy-redirect-uri");
 const spotifyStatus = document.querySelector("#spotify-status");
 const playlistChoiceInputs = document.querySelectorAll("input[name='quizPlaylist']");
 const yearStartInput = document.querySelector("#year-start");
@@ -350,6 +352,7 @@ const state = {
 initializeYearControls();
 initializeSpotifyControls();
 bindEvents();
+updateSpotifyRedirectUriDisplay();
 updateActionButtons();
 startSpotifyCooldownIfNeeded();
 completeSpotifyLoginIfNeeded().then(() => {
@@ -535,6 +538,10 @@ function initializeSpotifyControls() {
 
   connectSpotifyButton.addEventListener("click", () => {
     startSpotifyLogin();
+  });
+
+  copyRedirectUriButton.addEventListener("click", async () => {
+    await copySpotifyRedirectUri();
   });
 
   retrySpotifyPlayerButton.addEventListener("click", async () => {
@@ -3093,10 +3100,28 @@ function getSpotifyClientId() {
 }
 
 function getSpotifyRedirectUri() {
-  const pathname = window.location.pathname.endsWith("/")
-    ? `${window.location.pathname}index.html`
-    : window.location.pathname;
-  return `${window.location.origin}${pathname}`;
+  return `${window.location.origin}${window.location.pathname || "/"}`;
+}
+
+function updateSpotifyRedirectUriDisplay() {
+  spotifyRedirectUriInput.value = getSpotifyRedirectUri();
+}
+
+async function copySpotifyRedirectUri() {
+  updateSpotifyRedirectUriDisplay();
+  spotifyRedirectUriInput.select();
+  spotifyRedirectUriInput.setSelectionRange(0, spotifyRedirectUriInput.value.length);
+
+  try {
+    if (!navigator.clipboard) {
+      throw new Error("Clipboard API is unavailable.");
+    }
+
+    await navigator.clipboard.writeText(spotifyRedirectUriInput.value);
+    setSpotifyStatus("현재 Redirect URI를 복사했습니다. Spotify Dashboard에 그대로 붙여넣으세요.");
+  } catch {
+    setSpotifyStatus("현재 Redirect URI가 선택되었습니다. Ctrl+C로 복사해 Spotify Dashboard에 붙여넣으세요.");
+  }
 }
 
 function getStoredReturnUrlWithoutAuthParams() {
@@ -3116,6 +3141,7 @@ function getStoredReturnUrlWithoutAuthParams() {
 function refreshSpotifyUi() {
   const hasClientId = Boolean(getSpotifyClientId());
   const hasToken = Boolean(state.spotify.token);
+  updateSpotifyRedirectUriDisplay();
   spotifyClientIdInput.value = getSpotifyClientId();
   connectSpotifyButton.hidden = hasToken;
   retrySpotifyPlayerButton.hidden = !hasToken;

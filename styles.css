@@ -226,6 +226,39 @@ label {
   font-weight: 800;
 }
 
+.redirect-helper {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.redirect-helper label {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.redirect-helper input {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family:
+    "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+}
+
+.redirect-helper button {
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 14px;
+  color: var(--primary-strong);
+  background: var(--soft);
+  cursor: pointer;
+  font-weight: 900;
+}
+
 .playlist-source {
   display: grid;
   gap: 10px;

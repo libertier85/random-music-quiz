@@ -49,6 +49,8 @@ assert(
   "retry-spotify-player",
   "diagnose-spotify",
   "disconnect-spotify",
+  "spotify-redirect-uri",
+  "copy-redirect-uri",
   "source-status",
   "toggle-answer",
   "toggle-playback",
@@ -78,6 +80,11 @@ assert(
   styles.includes(".result-track-button"),
   "Quiz result track buttons need visible styling",
 );
+assert(
+  styles.includes(".redirect-helper"),
+  "Spotify redirect helper needs visible styling",
+);
 assert(app.includes("playFullResultTrack"), "Finished quiz must support full-track replay");
+assert(app.includes("copySpotifyRedirectUri"), "Spotify redirect URI must be easy to copy");
 
 console.log(`QA smoke passed: v${version} · ${build}`);
