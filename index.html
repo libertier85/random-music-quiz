@@ -12,7 +12,7 @@
         <div class="title-block">
           <p class="eyebrow">Car Music Quiz</p>
           <h1 id="app-title">랜덤 플레이 뮤직 퀴즈</h1>
-          <p class="app-version" id="app-version">v0.6.9 · fill-requested-count</p>
+          <p class="app-version" id="app-version">v0.8.0 · owned-playlist-mode</p>
         </div>
 
         <form class="settings" id="quiz-settings">
@@ -41,6 +41,31 @@
           </fieldset>
 
           <fieldset>
+            <legend>플레이리스트</legend>
+            <div class="playlist-source" role="radiogroup" aria-label="플레이리스트 선택">
+              <label>
+                <input
+                  type="radio"
+                  name="quizPlaylist"
+                  value="0C5dTANYJbiVOY5yALyUgy"
+                  checked
+                />
+                <span>
+                  <strong>랜덤퀴즈 신곡</strong>
+                  <small>새로 넣은 K-pop 후보</small>
+                </span>
+              </label>
+              <label>
+                <input type="radio" name="quizPlaylist" value="2hGCc3iEBj1KwS8gEoNHKZ" />
+                <span>
+                  <strong>랜덤퀴즈 Top100</strong>
+                  <small>직접 복사한 차트 후보</small>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
             <legend>재생 위치</legend>
             <div class="segmented-control" role="radiogroup" aria-label="재생 위치">
               <label>
@@ -54,7 +79,7 @@
             </div>
           </fieldset>
 
-          <fieldset>
+          <fieldset class="advanced-settings" hidden>
             <legend>카테고리</legend>
             <div class="category-groups">
               <div class="category-group">
@@ -209,6 +234,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=fill-requested-count"></script>
+    <script src="./app.js?v=owned-playlist-mode"></script>
   </body>
 </html>

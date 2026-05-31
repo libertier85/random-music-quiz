@@ -1,22 +1,43 @@
 const YEAR_START = 1990;
 const YEAR_END = 2026;
-const APP_VERSION = "0.6.9";
-const APP_BUILD = "fill-requested-count";
+const APP_VERSION = "0.8.0";
+const APP_BUILD = "owned-playlist-mode";
 const RECENT_MONTHS = 6;
 const SPOTIFY_SEARCH_BATCH_SIZE = 2;
 const SPOTIFY_REQUEST_TIMEOUT_MS = 8_000;
 const SPOTIFY_MAX_QUERY_COUNT = 6;
 const SPOTIFY_MAX_RELAXED_QUERY_COUNT = 4;
-const SPOTIFY_ARTIST_FILTER_LIMIT = 60;
+const SPOTIFY_ARTIST_FILTER_LIMIT = 120;
 const SPOTIFY_ARTIST_GENRE_LOOKUP_LIMIT = 0;
 const SPOTIFY_AUDIO_FEATURE_LOOKUP_LIMIT = 0;
 const SPOTIFY_RATE_LIMIT_RETRY_COUNT = 1;
 const SPOTIFY_DEFAULT_RATE_LIMIT_SECONDS = 300;
 const SPOTIFY_SEARCH_LIMIT = 10;
 const KOREA_TOP_PLAYLIST_IDS = [
+  "37i9dQZF1DX9tPFwDMOaN1", // Recent K-pop / regularly updated Spotify playlist
   "37i9dQZF1DWT9uTRZAYj0c", // Hot Hits Korea Top 100
   "37i9dQZEVXbNxXF4SkHj9F", // Top 50 - South Korea
 ];
+const QUIZ_PLAYLISTS = [
+  {
+    id: "0C5dTANYJbiVOY5yALyUgy",
+    name: "랜덤퀴즈 신곡",
+  },
+  {
+    id: "2hGCc3iEBj1KwS8gEoNHKZ",
+    name: "랜덤퀴즈 Top100",
+  },
+];
+const KOREA_TOP_FALLBACK_PLAYLIST_QUERIES = [
+  "실시간 멜론차트 TOP 100",
+  "Melon Charts Top 100",
+  "Korea Top 100",
+  "Hot Hits Korea",
+  "Top 50 South Korea",
+];
+const KOREA_TOP_FALLBACK_PLAYLIST_LIMIT = 4;
+const KOREA_TOP_SEARCH_FALLBACK_QUERY_COUNT = 10;
+const RECENT_QUEUE_HISTORY_LIMIT = 40;
 const SPOTIFY_CLIENT_ID_KEY = "randomMusicQuiz.spotifyClientId";
 const SPOTIFY_TOKEN_KEY = "randomMusicQuiz.spotifyToken";
 const SPOTIFY_RATE_LIMIT_UNTIL_KEY = "randomMusicQuiz.spotifyRateLimitedUntil";
@@ -28,6 +49,9 @@ const SPOTIFY_SCOPES = [
   "user-read-private",
   "user-modify-playback-state",
   "user-read-playback-state",
+  "playlist-read-private",
+  "playlist-read-collaborative",
+  "playlist-modify-private",
 ];
 
 const isDebugMode = new URLSearchParams(window.location.search).get("debug") === "1";
@@ -222,6 +246,21 @@ const knownKoreanArtistAliases = {
   "mixed-duo": ["akmu", "bol4", "busker busker", "악뮤", "볼빨간사춘기"],
 };
 
+const knownKoreanDanceSoloAliases = [
+  "chung ha",
+  "chungha",
+  "g-dragon",
+  "jennie",
+  "jimin",
+  "jung kook",
+  "jungkook",
+  "kai",
+  "lisa",
+  "somi",
+  "sunmi",
+  "taemin",
+];
+
 const knownKoreanArtistNames = new Set(Object.values(knownKoreanArtistAliases).flat());
 
 const appVersionLabel = document.querySelector("#app-version");
@@ -237,6 +276,7 @@ const retrySpotifyPlayerButton = document.querySelector("#retry-spotify-player")
 const diagnoseSpotifyButton = document.querySelector("#diagnose-spotify");
 const disconnectSpotifyButton = document.querySelector("#disconnect-spotify");
 const spotifyStatus = document.querySelector("#spotify-status");
+const playlistChoiceInputs = document.querySelectorAll("input[name='quizPlaylist']");
 const yearStartInput = document.querySelector("#year-start");
 const yearEndInput = document.querySelector("#year-end");
 const yearRangePanel = document.querySelector("#year-range-panel");
@@ -296,6 +336,7 @@ const state = {
     rateLimitIsExact: false,
     rateLimitTimerId: null,
   },
+  recentTrackKeys: [],
   yearPreset: {
     recentMonths: RECENT_MONTHS,
   },
@@ -496,12 +537,23 @@ function readSettings() {
 
   return {
     playFrom,
+    playlistId: getSelectedPlaylistId(),
+    playlistName: getSelectedPlaylistName(),
     selectedCategories: getSelectedCategories(),
     dateFilter: getDateFilter(yearMode),
     playDuration: rawDuration === "full" ? "full" : Number(rawDuration),
     breakSeconds: Number(breakInput.value),
     songCount: Number(songCountInput.value),
   };
+}
+
+function getSelectedPlaylistId() {
+  return document.querySelector("input[name='quizPlaylist']:checked")?.value || QUIZ_PLAYLISTS[0].id;
+}
+
+function getSelectedPlaylistName() {
+  const playlistId = getSelectedPlaylistId();
+  return QUIZ_PLAYLISTS.find((playlist) => playlist.id === playlistId)?.name || "선택한 플레이리스트";
 }
 
 function getSelectedCategories() {
@@ -527,35 +579,59 @@ function getDateFilter(yearMode) {
 }
 
 async function buildSpotifyQueue(settings) {
-  sourceStatus.textContent = "Spotify에서 조건에 맞는 후보 곡을 찾는 중입니다.";
-  appendHarnessLog("Spotify 후보 검색 시작");
+  sourceStatus.textContent = `${settings.playlistName}에서 랜덤 후보 곡을 불러오는 중입니다.`;
+  appendHarnessLog(`플레이리스트 후보 불러오기: ${settings.playlistName}`);
 
-  const targetCandidateCount = Math.max(settings.songCount * 2, settings.songCount + 3);
-  const candidates = await fetchSpotifyCandidates(
-    settings.selectedCategories,
-    settings.dateFilter,
-    targetCandidateCount,
-  );
+  const targetCandidateCount = Math.max(settings.songCount * 3, settings.songCount + 3);
+  const candidates = settings.playlistId
+    ? await fetchOwnedPlaylistCandidates(settings.playlistId, settings.playlistName)
+    : await fetchSpotifyCandidates(
+        settings.selectedCategories,
+        settings.dateFilter,
+        targetCandidateCount,
+      );
   const shuffled = shuffleList(candidates);
 
   if (shuffled.length === 0) {
     return [];
   }
 
-  const queue = selectDiverseQueue(shuffled, settings.songCount);
+  const queue = selectDiverseQueue(shuffled, settings.songCount, new Set(state.recentTrackKeys));
+  rememberRecentQueue(queue);
   const artistCount = new Set(queue.map(getPrimaryArtistKeyFromTrack).filter(Boolean)).size;
   const shortageMessage =
     queue.length < settings.songCount ? ` 요청한 ${settings.songCount}곡 중 ${queue.length}곡만 재생합니다.` : "";
 
-  appendHarnessLog(`Spotify 후보 ${candidates.length}곡 중 ${queue.length}곡 선택, 가수 ${artistCount}명`);
-  sourceStatus.textContent = `Spotify 후보 ${candidates.length}곡을 찾았습니다.${shortageMessage} 첫 곡을 준비합니다.`;
+  appendHarnessLog(`${settings.playlistName} 후보 ${candidates.length}곡 중 ${queue.length}곡 선택, 가수 ${artistCount}명`);
+  sourceStatus.textContent = `${settings.playlistName} 후보 ${candidates.length}곡을 불러왔습니다.${shortageMessage} 첫 곡을 준비합니다.`;
   return queue;
 }
 
-function selectDiverseQueue(tracks, targetCount) {
+function selectDiverseQueue(tracks, targetCount, avoidTrackKeys = new Set()) {
+  const selectedKeys = new Set();
+  const preferredTracks = tracks.filter((track) => !avoidTrackKeys.has(getTrackDedupeKey(track)));
+  const fallbackTracks = tracks.filter((track) => avoidTrackKeys.has(getTrackDedupeKey(track)));
+  const selected = selectDiverseTracks(preferredTracks, targetCount, selectedKeys);
+
+  if (selected.length < targetCount) {
+    selected.push(
+      ...selectDiverseTracks(fallbackTracks, targetCount - selected.length, selectedKeys),
+    );
+  }
+
+  return selected;
+}
+
+function selectDiverseTracks(tracks, targetCount, selectedKeys = new Set()) {
   const byArtist = new Map();
 
   tracks.forEach((track) => {
+    const trackKey = getTrackDedupeKey(track);
+
+    if (!trackKey || selectedKeys.has(trackKey)) {
+      return;
+    }
+
     const artistKey = getPrimaryArtistKeyFromTrack(track) || `unknown-${byArtist.size}`;
 
     if (!byArtist.has(artistKey)) {
@@ -581,12 +657,70 @@ function selectDiverseQueue(tracks, targetCount) {
 
       if (track) {
         selected.push(track);
+        selectedKeys.add(getTrackDedupeKey(track));
         madeProgress = true;
       }
     }
   }
 
   return selected;
+}
+
+function getTrackDedupeKey(track) {
+  const artistKey = getPrimaryArtistKeyFromTrack(track);
+  const titleKey = normalizeTrackTitle(track.title || "");
+
+  return titleKey && artistKey ? `${titleKey}::${artistKey}` : "";
+}
+
+function rememberRecentQueue(queue) {
+  const newKeys = queue.map(getTrackDedupeKey).filter(Boolean);
+
+  state.recentTrackKeys = [
+    ...newKeys,
+    ...state.recentTrackKeys.filter((key) => !newKeys.includes(key)),
+  ].slice(0, RECENT_QUEUE_HISTORY_LIMIT);
+}
+
+async function fetchOwnedPlaylistCandidates(playlistId, playlistName) {
+  const token = await getSpotifyAccessToken();
+  const items = await fetchPlaylistTrackItems(playlistId, token);
+  appendHarnessLog(`${playlistName} 원본 ${items.length}곡 조회`);
+  const playableItems = mergeSpotifyItems(items)
+    .filter((item) => item.is_playable !== false)
+    .filter((item) => !isLikelyAlternateVersion(item));
+
+  appendHarnessLog(`${playlistName}에서 재생 가능한 후보 ${playableItems.length}곡 확보`);
+  return playableItems.map((item) => spotifyItemToQuizTrack(item, [playlistName]));
+}
+
+async function fetchPlaylistTrackItems(playlistId, token) {
+  const items = [];
+
+  for (let offset = 0; offset < 500; offset += 100) {
+    const params = new URLSearchParams({
+      market: "KR",
+      limit: "100",
+      offset: String(offset),
+    });
+    const data = await spotifyApiFetch(
+      `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/items?${params}`,
+      { token },
+    );
+
+    data.items
+      ?.map((item) => item.track || item.item)
+      .filter(Boolean)
+      .forEach((item) => {
+        items.push(item);
+      });
+
+    if (!data.next) {
+      break;
+    }
+  }
+
+  return items;
 }
 
 function getPrimaryArtistKeyFromTrack(track) {
@@ -1112,8 +1246,15 @@ async function fetchSpotifyCandidates(selectedCategories, dateFilter, targetCoun
   const playlistItems = selectedCategories.includes("korea-top100")
     ? await fetchKoreaTopPlaylistItems(token, dateFilter)
     : [];
-  const queries = buildSpotifyCandidateQueries(selectedCategories, dateFilter);
-  const items = await fetchSpotifyCandidateItems(queries, token, dateFilter, targetCount);
+  const shouldUseKoreaTopSearchFallback =
+    selectedCategories.includes("korea-top100") && playlistItems.length === 0;
+  const searchDateFilter = shouldUseKoreaTopSearchFallback
+    ? getKoreaTopPlaylistDateFilter(dateFilter)
+    : dateFilter;
+  const queries = shouldUseKoreaTopSearchFallback
+    ? buildKoreaTopSearchFallbackQueries(selectedCategories, searchDateFilter)
+    : buildSpotifyCandidateQueries(selectedCategories, searchDateFilter);
+  const items = await fetchSpotifyCandidateItems(queries, token, searchDateFilter, targetCount);
   let filteredItems = await filterSpotifyCandidateItems(
     mergeSpotifyItems(playlistItems, items),
     selectedCategories,
@@ -1122,11 +1263,13 @@ async function fetchSpotifyCandidates(selectedCategories, dateFilter, targetCoun
 
   if (filteredItems.length < targetCount) {
     appendHarnessLog("정밀 검색 후보 부족, 완화 검색 시작");
-    const relaxedQueries = buildSpotifyRelaxedCandidateQueries(selectedCategories, dateFilter);
+    const relaxedQueries = shouldUseKoreaTopSearchFallback
+      ? buildKoreaTopSearchFallbackQueries(selectedCategories, searchDateFilter, true)
+      : buildSpotifyRelaxedCandidateQueries(selectedCategories, searchDateFilter);
     const relaxedItems = await fetchSpotifyCandidateItems(
       relaxedQueries,
       token,
-      dateFilter,
+      searchDateFilter,
       targetCount,
     );
     const relaxedFilteredItems = await filterSpotifyCandidateItems(
@@ -1148,6 +1291,7 @@ async function fetchSpotifyCandidates(selectedCategories, dateFilter, targetCoun
 
 async function fetchKoreaTopPlaylistItems(token, dateFilter) {
   const items = [];
+  const playlistDateFilter = getKoreaTopPlaylistDateFilter(dateFilter);
 
   for (const playlistId of KOREA_TOP_PLAYLIST_IDS) {
     if (state.spotify.unavailablePlaylists.has(playlistId)) {
@@ -1172,7 +1316,7 @@ async function fetchKoreaTopPlaylistItems(token, dateFilter) {
           ?.map((item) => item.track)
           .filter(Boolean)
           .filter((item) => item.is_playable !== false)
-          .filter((item) => matchesSpotifyResultDate(item, dateFilter))
+          .filter((item) => matchesSpotifyResultDate(item, playlistDateFilter))
           .forEach((item) => {
             items.push(item);
           });
@@ -1186,11 +1330,121 @@ async function fetchKoreaTopPlaylistItems(token, dateFilter) {
     }
   }
 
+  if (items.length === 0) {
+    items.push(...(await fetchKoreaTopFallbackPlaylistItems(token, playlistDateFilter)));
+  }
+
   if (items.length > 0) {
     appendHarnessLog(`한국 Top 100 후보 ${items.length}곡 확보`);
   }
 
-  return items;
+  return mergeSpotifyItems(items);
+}
+
+function getKoreaTopPlaylistDateFilter(dateFilter) {
+  if (dateFilter.mode === "recent") {
+    return createYearDateFilter(yearsBetween(YEAR_START, YEAR_END));
+  }
+
+  return dateFilter;
+}
+
+async function fetchKoreaTopFallbackPlaylistItems(token, dateFilter) {
+  const playlistIds = await searchKoreaTopFallbackPlaylistIds(token);
+  const items = [];
+
+  for (const playlistId of playlistIds) {
+    if (state.spotify.unavailablePlaylists.has(playlistId)) {
+      continue;
+    }
+
+    try {
+      const params = new URLSearchParams({
+        market: "KR",
+        limit: "50",
+        offset: "0",
+        fields:
+          "items(track(id,name,uri,is_playable,duration_ms,album(name,release_date),artists(id,name)))",
+      });
+      const data = await spotifyApiFetch(
+        `https://api.spotify.com/v1/playlists/${playlistId}/tracks?${params}`,
+        { token },
+      );
+
+      data.items
+        ?.map((item) => item.track)
+        .filter(Boolean)
+        .filter((item) => item.is_playable !== false)
+        .filter((item) => matchesSpotifyResultDate(item, dateFilter))
+        .forEach((item) => {
+          items.push(item);
+        });
+    } catch (error) {
+      appendHarnessLog(`대체 Top 100 플레이리스트 조회 실패: ${error.message}`);
+
+      if (/403|Forbidden|권한/.test(error.message)) {
+        state.spotify.unavailablePlaylists.add(playlistId);
+      }
+    }
+
+    if (items.length >= 50) {
+      break;
+    }
+  }
+
+  if (items.length > 0) {
+    appendHarnessLog(`대체 Top 100 후보 ${items.length}곡 확보`);
+  }
+
+  return mergeSpotifyItems(items);
+}
+
+async function searchKoreaTopFallbackPlaylistIds(token) {
+  const byId = new Map();
+
+  for (const query of KOREA_TOP_FALLBACK_PLAYLIST_QUERIES) {
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        type: "playlist",
+        market: "KR",
+        limit: "5",
+      });
+      const data = await spotifyApiFetch(`https://api.spotify.com/v1/search?${params}`, {
+        token,
+      });
+
+      (data.playlists?.items || [])
+        .filter(isUsefulKoreaTopPlaylist)
+        .forEach((playlist) => {
+          byId.set(playlist.id, playlist);
+        });
+    } catch (error) {
+      appendHarnessLog(`대체 Top 100 검색 실패: ${query} / ${error.message}`);
+    }
+
+    if (byId.size >= KOREA_TOP_FALLBACK_PLAYLIST_LIMIT) {
+      break;
+    }
+  }
+
+  return [...byId.keys()].slice(0, KOREA_TOP_FALLBACK_PLAYLIST_LIMIT);
+}
+
+function isUsefulKoreaTopPlaylist(playlist) {
+  if (!playlist?.id) {
+    return false;
+  }
+
+  const text = `${playlist.name || ""} ${playlist.description || ""} ${
+    playlist.owner?.display_name || ""
+  }`.toLowerCase();
+  const looksLikeKoreaChart =
+    /korea|korean|south korea|melon|한국|국내|멜론|차트|실시간/.test(text) &&
+    /top\s*100|top\s*50|chart|charts|hot hits|차트|인기/.test(text);
+  const looksLikeNoise = /piano|sleep|study|lofi|workout|cover|karaoke|instrumental/.test(text);
+
+  return looksLikeKoreaChart && !looksLikeNoise;
 }
 
 function mergeSpotifyItems(...itemGroups) {
@@ -1523,6 +1777,101 @@ function buildSpotifyRelaxedCandidateQueries(selectedCategories, dateFilter) {
   );
 }
 
+function buildKoreaTopSearchFallbackQueries(selectedCategories, dateFilter, relaxed = false) {
+  const styles = selectedCategories.filter((category) => filterGroups.style.includes(category));
+  const artistTypes = selectedCategories.filter((category) => filterGroups.artist.includes(category));
+  const fallbackArtistPool =
+    artistTypes.length > 0
+      ? artistTypes.flatMap((category) => getKoreaTopFallbackArtistTerms(category))
+      : getKoreaTopGeneralFallbackArtistTerms();
+  const artistTerms = takeUniqueTerms(
+    shuffleList(fallbackArtistPool),
+    relaxed ? 6 : KOREA_TOP_SEARCH_FALLBACK_QUERY_COUNT,
+  );
+  const baseTerms = [];
+  const wantsDance = styles.includes("dance") || styles.includes("electronic");
+
+  artistTerms.forEach((artistTerm) => {
+    baseTerms.push(formatSpotifyArtistTerm(artistTerm));
+  });
+
+  if (artistTerms.length === 0) {
+    baseTerms.push(
+      "genre:k-pop",
+      "k-pop top hits",
+      wantsDance ? "k-pop hits" : "korean pop hits",
+      "popular k-pop",
+    );
+  }
+
+  if (relaxed) {
+    baseTerms.push(
+      ...artistTypes.map((category) => getSpotifyArtistTerms(category, styles)).flat(),
+      "k-pop",
+      "korean pop",
+    );
+  }
+
+  return appendSpotifyYearTerms(baseTerms, getSpotifyYearTerms(dateFilter)).slice(
+    0,
+    relaxed ? SPOTIFY_MAX_RELAXED_QUERY_COUNT : KOREA_TOP_SEARCH_FALLBACK_QUERY_COUNT,
+  );
+}
+
+function getKoreaTopGeneralFallbackArtistTerms() {
+  return [
+    ...getKoreaTopFallbackArtistTerms("girl-group").slice(0, 8),
+    ...getKoreaTopFallbackArtistTerms("boy-group").slice(0, 8),
+    "JENNIE",
+    "LISA",
+    "CHUNG HA",
+    "SOMI",
+    "SUNMI",
+    "JUNG KOOK",
+    "Jimin",
+    "G-DRAGON",
+    "ZICO",
+    "TAEMIN",
+  ];
+}
+
+function getKoreaTopFallbackArtistTerms(category) {
+  return {
+    "girl-group": [
+      "aespa",
+      "IVE",
+      "LE SSERAFIM",
+      "NewJeans",
+      "ILLIT",
+      "NMIXX",
+      "BABYMONSTER",
+      "KISS OF LIFE",
+      "(G)I-DLE",
+      "TWICE",
+      "BLACKPINK",
+      "ITZY",
+    ],
+    "boy-group": [
+      "BTS",
+      "SEVENTEEN",
+      "Stray Kids",
+      "NCT DREAM",
+      "NCT 127",
+      "RIIZE",
+      "ENHYPEN",
+      "TOMORROW X TOGETHER",
+      "TWS",
+      "BOYNEXTDOOR",
+      "ATEEZ",
+      "ZEROBASEONE",
+    ],
+    "female-solo": ["JENNIE", "LISA", "IU", "TAEYEON", "BIBI", "CHUNG HA", "SOMI", "SUNMI"],
+    "male-solo": ["JUNG KOOK", "Jimin", "G-DRAGON", "ZICO", "TAEMIN", "KAI"],
+    band: ["DAY6", "QWER", "LUCY", "N.Flying"],
+    "mixed-duo": ["AKMU", "BOL4"],
+  }[category] || [];
+}
+
 function takeUniqueTerms(terms, count) {
   return [...new Set(terms.filter(Boolean))].slice(0, count);
 }
@@ -1702,6 +2051,10 @@ function matchesSpotifyResultCategories(
     return true;
   }
 
+  if (isLikelyAlternateVersion(item)) {
+    return false;
+  }
+
   return Object.entries(filterGroups).every(([groupName, groupTags]) => {
     const selectedInGroup = selectedCategories.filter((category) => groupTags.includes(category));
 
@@ -1719,6 +2072,14 @@ function matchesSpotifyResultCategories(
             : matchesSpotifyArtistCategory(item, category, artistGenreMap),
     );
   });
+}
+
+function isLikelyAlternateVersion(item) {
+  const text = `${item.name || ""} ${item.album?.name || ""}`.toLowerCase();
+
+  return /\b(remix|instrumental|karaoke|sped up|slowed|live|remaster|remastered|version|edit)\b/.test(
+    text,
+  );
 }
 
 function matchesSpotifyCountryCategory(item, category, artistGenreMap) {
@@ -1800,7 +2161,7 @@ function matchesSpotifyStyleCategory(item, category, artistGenreMap, trackFeatur
   }
 
   if (genres.length === 0) {
-    return true;
+    return category === "dance" ? hasKnownDancePrimaryArtist(item) : true;
   }
 
   if (category === "dance") {
@@ -1941,6 +2302,20 @@ function hasKnownArtistType(item, category) {
   });
 }
 
+function hasKnownDancePrimaryArtist(item) {
+  return item.artists.slice(0, 1).some((artist) => {
+    const normalized = normalizeArtistName(artist.name);
+
+    return (
+      hasKnownArtistType(item, "girl-group") ||
+      hasKnownArtistType(item, "boy-group") ||
+      knownKoreanDanceSoloAliases.some((alias) =>
+        matchesKnownArtistAlias(normalized, alias, artist.name),
+      )
+    );
+  });
+}
+
 function matchesKnownArtistAlias(normalizedArtistName, alias, originalArtistName = "") {
   const normalizedAlias = normalizeArtistName(alias);
 
@@ -1952,7 +2327,7 @@ function matchesKnownArtistAlias(normalizedArtistName, alias, originalArtistName
     return false;
   }
 
-  if (normalizedAlias.length <= 3) {
+  if (normalizedAlias.length <= 3 || !normalizedAlias.includes(" ")) {
     return normalizedArtistName === normalizedAlias;
   }
 

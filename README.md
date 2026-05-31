@@ -38,4 +38,4 @@ node qa-smoke.mjs
 
 ## 현재 버전
 
-`v0.6.9 · fill-requested-count`
+`v0.8.0 · owned-playlist-mode`
