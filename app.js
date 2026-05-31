@@ -1,7 +1,7 @@
 const YEAR_START = 1990;
 const YEAR_END = 2026;
-const APP_VERSION = "0.8.0";
-const APP_BUILD = "owned-playlist-mode";
+const APP_VERSION = "0.8.1";
+const APP_BUILD = "pages-redirect";
 const RECENT_MONTHS = 6;
 const SPOTIFY_SEARCH_BATCH_SIZE = 2;
 const SPOTIFY_REQUEST_TIMEOUT_MS = 8_000;
@@ -2916,7 +2916,10 @@ function getSpotifyClientId() {
 }
 
 function getSpotifyRedirectUri() {
-  return `${window.location.origin}${window.location.pathname}`;
+  const pathname = window.location.pathname.endsWith("/")
+    ? `${window.location.pathname}index.html`
+    : window.location.pathname;
+  return `${window.location.origin}${pathname}`;
 }
 
 function getStoredReturnUrlWithoutAuthParams() {

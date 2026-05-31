@@ -22,10 +22,21 @@ Spotify Developer Dashboard에서 앱을 만들고 Redirect URI에 아래 주소
 
 ```text
 http://127.0.0.1:4173/index.html
+https://libertier85.github.io/random-music-quiz/index.html
 ```
 
 앱 화면의 Spotify Client ID 칸에 Client ID를 붙여넣고 저장한 뒤 Spotify 로그인을 진행합니다.
 Client Secret은 사용하지 않습니다.
+
+## 집 밖에서 사용
+
+아래 GitHub Pages 주소를 Chrome 또는 Edge에서 엽니다.
+
+```text
+https://libertier85.github.io/random-music-quiz/index.html
+```
+
+Spotify Developer Dashboard의 Redirect URI에 위 주소가 등록되어 있어야 로그인할 수 있습니다.
 
 ## 로컬 검증
 
@@ -38,4 +49,4 @@ node qa-smoke.mjs
 
 ## 현재 버전
 
-`v0.8.0 · owned-playlist-mode`
+`v0.8.1 · pages-redirect`
