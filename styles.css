@@ -474,6 +474,19 @@ input[type="radio"] {
   text-align: center;
 }
 
+.player-panel.has-results .now-playing {
+  flex: 0;
+  padding: 28px 24px 18px;
+}
+
+.player-panel.has-results .disc {
+  display: none;
+}
+
+.player-panel.has-results #question-label {
+  font-size: clamp(1.5rem, 3vw, 2.3rem);
+}
+
 #mode-label {
   margin-bottom: 0;
   padding: 8px 12px;
@@ -520,6 +533,122 @@ input[type="radio"] {
 
 .hidden {
   visibility: hidden;
+}
+
+.quiz-results {
+  display: grid;
+  gap: 14px;
+  padding: 0 24px 24px;
+}
+
+.quiz-results[hidden] {
+  display: none;
+}
+
+.results-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.results-eyebrow {
+  margin: 0 0 4px;
+  color: var(--primary);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.results-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+#quiz-results-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--primary-strong);
+  background: var(--soft);
+  font-size: 0.84rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.result-list {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.result-track-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 62px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.result-track-button:hover,
+.result-track-button:focus-visible,
+.result-track-button.is-active {
+  border-color: var(--primary);
+  background: var(--soft);
+  box-shadow: 0 8px 18px rgba(17, 107, 95, 0.12);
+}
+
+.result-number {
+  display: grid;
+  width: 34px;
+  min-height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--primary);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.result-track-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.result-title,
+.result-artist,
+.result-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-title {
+  font-size: 0.98rem;
+}
+
+.result-artist,
+.result-meta {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
 }
 
 .player-actions {
@@ -603,5 +732,13 @@ body.show-debug .harness-log {
 
   .player-panel {
     min-height: 560px;
+  }
+
+  .result-track-button {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .result-meta {
+    grid-column: 2;
   }
 }

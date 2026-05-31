@@ -53,6 +53,9 @@ assert(
   "toggle-answer",
   "toggle-playback",
   "next-song",
+  "quiz-results",
+  "quiz-results-count",
+  "quiz-result-list",
   "run-category-qa",
   "harness-log",
 ].forEach((id) => {
@@ -71,5 +74,10 @@ assert(
   styles.includes(".player-actions button:disabled"),
   "Disabled player action buttons need visible styling",
 );
+assert(
+  styles.includes(".result-track-button"),
+  "Quiz result track buttons need visible styling",
+);
+assert(app.includes("playFullResultTrack"), "Finished quiz must support full-track replay");
 
 console.log(`QA smoke passed: v${version} · ${build}`);

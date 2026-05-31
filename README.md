@@ -37,6 +37,7 @@ https://libertier85.github.io/random-music-quiz/index.html
 ```
 
 Spotify Developer Dashboard의 Redirect URI에 위 주소가 등록되어 있어야 로그인할 수 있습니다.
+퀴즈가 끝나면 들었던 노래 목록이 표시되고, 노래를 누르면 처음부터 전곡을 들을 수 있습니다.
 
 ## 로컬 검증
 
@@ -49,4 +50,4 @@ node qa-smoke.mjs
 
 ## 현재 버전
 
-`v0.8.1 · pages-redirect`
+`v0.8.2 · quiz-results`

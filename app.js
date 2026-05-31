@@ -1,7 +1,7 @@
 const YEAR_START = 1990;
 const YEAR_END = 2026;
-const APP_VERSION = "0.8.1";
-const APP_BUILD = "pages-redirect";
+const APP_VERSION = "0.8.2";
+const APP_BUILD = "quiz-results";
 const RECENT_MONTHS = 6;
 const SPOTIFY_SEARCH_BATCH_SIZE = 2;
 const SPOTIFY_REQUEST_TIMEOUT_MS = 8_000;
@@ -291,6 +291,9 @@ const answerLabel = document.querySelector("#answer-label");
 const toggleAnswerButton = document.querySelector("#toggle-answer");
 const togglePlaybackButton = document.querySelector("#toggle-playback");
 const nextSongButton = document.querySelector("#next-song");
+const quizResults = document.querySelector("#quiz-results");
+const quizResultsCount = document.querySelector("#quiz-results-count");
+const quizResultList = document.querySelector("#quiz-result-list");
 const harnessLog = document.querySelector("#harness-log");
 const runCategoryQaButton = document.querySelector("#run-category-qa");
 const playerPanel = document.querySelector(".player-panel");
@@ -316,6 +319,8 @@ const state = {
   remainingSeconds: 0,
   currentStartSecond: 0,
   currentPlaySeconds: 0,
+  playedTracks: [],
+  reviewTrack: null,
   phase: "idle",
   isPaused: false,
   spotify: {
@@ -358,6 +363,14 @@ function bindEvents() {
     state.settings = readSettings();
     quizStartButton.disabled = true;
     quizStartButton.textContent = "후보 검색 중";
+    clearTimer();
+    state.isPaused = false;
+    state.phase = "idle";
+    state.currentIndex = -1;
+    await stopActiveAudio();
+    resetQuizResults();
+    playerPanel.classList.remove("is-playing");
+    updatePlaybackToggleButton();
 
     try {
       const ready = await prepareSpotifyForQuiz();
@@ -375,15 +388,13 @@ function bindEvents() {
 
       state.currentIndex = -1;
       state.isPaused = false;
-      clearTimer();
-      await stopActiveAudio();
       appendHarnessLog(`퀴즈 시작: ${describePlayFrom(state.settings.playFrom)} 모드`);
       appendHarnessLog(`연도: ${describeDateFilter(state.settings.dateFilter)}`);
       appendHarnessLog(`카테고리: ${describeCategories(state.settings.selectedCategories)}`);
       await playNextTrack();
     } catch (error) {
       handleQuizStartError(error);
-} finally {
+    } finally {
       if (!startSpotifyCooldownIfNeeded()) {
         quizStartButton.disabled = false;
         quizStartButton.textContent = "퀴즈 시작";
@@ -431,6 +442,23 @@ function bindEvents() {
       await runCategoryQualityAudit();
     });
   }
+
+  quizResultList.addEventListener("click", async (event) => {
+    const resultButton =
+      event.target instanceof Element ? event.target.closest("[data-result-index]") : null;
+
+    if (!resultButton) {
+      return;
+    }
+
+    const track = state.playedTracks[Number(resultButton.dataset.resultIndex)];
+
+    if (!track) {
+      return;
+    }
+
+    await playFullResultTrack(track, resultButton);
+  });
 
   document.querySelectorAll("input[name='playFrom']").forEach((input) => {
     input.addEventListener("change", () => {
@@ -802,6 +830,7 @@ async function playNextTrack() {
   modeLabel.textContent = `${describePlayFrom(state.settings.playFrom)}부터 재생`;
   questionLabel.textContent = "이 노래는 무엇일까요?";
   answerLabel.textContent = `${track.title} - ${track.artist}`;
+  recordPlayedTrack(track);
   updatePlaybackToggleButton();
   appendHarnessLog(
     `${track.title} (${track.year}): ${formatTime(startSecond)}부터 ${formatTime(playSeconds)} 재생`,
@@ -871,6 +900,11 @@ function tick() {
       playNextTrack();
       return;
     }
+
+    if (state.phase === "reviewing") {
+      finishResultPlayback();
+      return;
+    }
   }
 
   state.timerId = window.setTimeout(() => {
@@ -884,14 +918,148 @@ async function finishQuiz() {
   await stopActiveAudio();
   state.phase = "finished";
   state.isPaused = false;
+  state.reviewTrack = null;
   playerPanel.classList.remove("is-playing");
+  playerPanel.classList.add("has-results");
   roundLabel.textContent = "완료";
   timerLabel.textContent = "00:00";
   questionLabel.textContent = "퀴즈가 끝났어요";
-  sourceStatus.textContent = "퀴즈 완료";
+  modeLabel.textContent = "정답 모아보기";
+  sourceStatus.textContent = `${state.playedTracks.length}곡을 들었습니다. 노래를 누르면 처음부터 전곡 재생합니다.`;
   answerLabel.classList.add("hidden");
+  clearActiveResultButton();
+  renderQuizResults();
   updatePlaybackToggleButton();
   appendHarnessLog("퀴즈 종료");
+}
+
+function recordPlayedTrack(track) {
+  const trackKey = getTrackDedupeKey(track) || `${track.title}::${track.artist}`;
+
+  if (state.playedTracks.some((playedTrack) => playedTrack.resultKey === trackKey)) {
+    return;
+  }
+
+  state.playedTracks.push({
+    ...track,
+    resultKey: trackKey,
+  });
+}
+
+function resetQuizResults() {
+  state.playedTracks = [];
+  state.reviewTrack = null;
+  quizResults.hidden = true;
+  quizResultList.replaceChildren();
+  quizResultsCount.textContent = "0곡";
+  playerPanel.classList.remove("has-results");
+  clearActiveResultButton();
+}
+
+function renderQuizResults() {
+  quizResultList.replaceChildren(
+    ...state.playedTracks.map((track, index) => createQuizResultItem(track, index)),
+  );
+  quizResultsCount.textContent = `${state.playedTracks.length}곡`;
+  quizResults.hidden = state.playedTracks.length === 0;
+}
+
+function createQuizResultItem(track, index) {
+  const item = document.createElement("li");
+  const button = document.createElement("button");
+  const number = document.createElement("span");
+  const main = document.createElement("span");
+  const title = document.createElement("strong");
+  const artist = document.createElement("span");
+  const meta = document.createElement("span");
+
+  button.type = "button";
+  button.className = "result-track-button";
+  button.dataset.resultIndex = String(index);
+  button.setAttribute("aria-label", `${track.title} - ${track.artist} 전체 재생`);
+  number.className = "result-number";
+  number.textContent = String(index + 1).padStart(2, "0");
+  main.className = "result-track-main";
+  title.className = "result-title";
+  title.textContent = track.title;
+  artist.className = "result-artist";
+  artist.textContent = track.artist;
+  meta.className = "result-meta";
+  meta.textContent = `${track.year} · ${formatTime(track.durationSeconds)}`;
+
+  main.append(title, artist);
+  button.append(number, main, meta);
+  item.append(button);
+
+  return item;
+}
+
+async function playFullResultTrack(track, resultButton) {
+  clearTimer();
+  await stopActiveAudio();
+
+  state.phase = "reviewing";
+  state.isPaused = false;
+  state.reviewTrack = track;
+  state.currentStartSecond = 0;
+  state.currentPlaySeconds = track.durationSeconds;
+  state.remainingSeconds = track.durationSeconds;
+
+  playerPanel.classList.add("is-playing", "has-results");
+  roundLabel.textContent = "전체 듣기";
+  timerLabel.textContent = formatTime(state.remainingSeconds);
+  modeLabel.textContent = "처음부터 전곡 재생";
+  questionLabel.textContent = "전체 재생 중";
+  answerLabel.textContent = `${track.title} - ${track.artist}`;
+  answerLabel.classList.remove("hidden");
+  setActiveResultButton(resultButton);
+  updatePlaybackToggleButton();
+
+  try {
+    sourceStatus.textContent = `${track.title} 전체 재생을 시작합니다.`;
+    await startActiveAudio(track, 0);
+    sourceStatus.textContent = `${track.title} 전체 재생 중입니다.`;
+    appendHarnessLog(`전체 듣기: ${track.title} - ${track.artist}`);
+    tick();
+  } catch (error) {
+    clearTimer();
+    state.phase = "finished";
+    state.isPaused = false;
+    state.reviewTrack = null;
+    playerPanel.classList.remove("is-playing");
+    sourceStatus.textContent = error.message;
+    clearActiveResultButton();
+    updatePlaybackToggleButton();
+    appendHarnessLog(`전체 듣기 오류: ${error.message}`);
+  }
+}
+
+async function finishResultPlayback() {
+  clearTimer();
+  await stopActiveAudio();
+  state.phase = "finished";
+  state.isPaused = false;
+  state.reviewTrack = null;
+  playerPanel.classList.remove("is-playing");
+  roundLabel.textContent = "완료";
+  timerLabel.textContent = "00:00";
+  modeLabel.textContent = "정답 모아보기";
+  questionLabel.textContent = "퀴즈가 끝났어요";
+  answerLabel.classList.add("hidden");
+  sourceStatus.textContent = "전체 듣기를 마쳤습니다. 다른 노래를 눌러 계속 들을 수 있습니다.";
+  clearActiveResultButton();
+  updatePlaybackToggleButton();
+}
+
+function setActiveResultButton(resultButton) {
+  clearActiveResultButton();
+  resultButton.classList.add("is-active");
+}
+
+function clearActiveResultButton() {
+  quizResultList.querySelectorAll(".is-active").forEach((button) => {
+    button.classList.remove("is-active");
+  });
 }
 
 function clearTimer() {
@@ -902,7 +1070,7 @@ function clearTimer() {
 }
 
 function canTogglePlayback() {
-  return state.phase === "playing" || state.phase === "break";
+  return state.phase === "playing" || state.phase === "break" || state.phase === "reviewing";
 }
 
 async function pausePlayback() {
@@ -910,9 +1078,10 @@ async function pausePlayback() {
   state.isPaused = true;
   playerPanel.classList.remove("is-playing");
 
-  if (state.phase === "playing") {
+  if (state.phase === "playing" || state.phase === "reviewing") {
     await pauseActiveAudio();
-    sourceStatus.textContent = "일시정지 중입니다.";
+    sourceStatus.textContent =
+      state.phase === "reviewing" ? "전체 듣기를 일시정지했습니다." : "일시정지 중입니다.";
   } else {
     sourceStatus.textContent = "곡 사이 쉬는 시간이 일시정지되었습니다.";
   }
@@ -924,12 +1093,22 @@ async function pausePlayback() {
 async function resumePlayback() {
   state.isPaused = false;
 
-  if (state.phase === "playing") {
-    const track = state.queue[state.currentIndex];
+  if (state.phase === "playing" || state.phase === "reviewing") {
+    const track = state.phase === "reviewing" ? state.reviewTrack : state.queue[state.currentIndex];
+
+    if (!track) {
+      state.phase = "finished";
+      updatePlaybackToggleButton();
+      return;
+    }
+
     const elapsedSeconds = state.currentPlaySeconds - state.remainingSeconds;
     await resumeActiveAudio(track, state.currentStartSecond + elapsedSeconds);
     playerPanel.classList.add("is-playing");
-    sourceStatus.textContent = "Spotify로 실제 음원 재생 중입니다.";
+    sourceStatus.textContent =
+      state.phase === "reviewing"
+        ? `${track.title} 전체 재생 중입니다.`
+        : "Spotify로 실제 음원 재생 중입니다.";
   } else {
     sourceStatus.textContent = "곡 사이 쉬는 시간입니다.";
   }
@@ -959,8 +1138,7 @@ function canShowAnswer() {
   return (
     state.currentIndex >= 0 &&
     state.currentIndex < state.queue.length &&
-    state.phase !== "idle" &&
-    state.phase !== "finished"
+    (state.phase === "playing" || state.phase === "break")
   );
 }
 
@@ -968,8 +1146,7 @@ function canMoveNext() {
   return (
     state.currentIndex >= 0 &&
     state.currentIndex < state.queue.length &&
-    state.phase !== "idle" &&
-    state.phase !== "finished"
+    (state.phase === "playing" || state.phase === "break")
   );
 }
 

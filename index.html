@@ -12,7 +12,7 @@
         <div class="title-block">
           <p class="eyebrow">Car Music Quiz</p>
           <h1 id="app-title">랜덤 플레이 뮤직 퀴즈</h1>
-          <p class="app-version" id="app-version">v0.8.1 · pages-redirect</p>
+          <p class="app-version" id="app-version">v0.8.2 · quiz-results</p>
         </div>
 
         <form class="settings" id="quiz-settings">
@@ -218,6 +218,17 @@
           <p id="answer-label" class="answer hidden"></p>
         </div>
 
+        <section class="quiz-results" id="quiz-results" aria-labelledby="quiz-results-title" hidden>
+          <div class="results-header">
+            <div>
+              <p class="results-eyebrow">오늘 들은 노래</p>
+              <h3 id="quiz-results-title">정답 모아보기</h3>
+            </div>
+            <span id="quiz-results-count">0곡</span>
+          </div>
+          <ol class="result-list" id="quiz-result-list"></ol>
+        </section>
+
         <div class="player-actions">
           <button type="button" id="toggle-answer">정답 보기</button>
           <button type="button" id="toggle-playback" disabled>시작</button>
@@ -234,6 +245,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=pages-redirect"></script>
+    <script src="./app.js?v=quiz-results"></script>
   </body>
 </html>
