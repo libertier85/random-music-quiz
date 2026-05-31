@@ -1,7 +1,7 @@
 const YEAR_START = 1990;
 const YEAR_END = 2026;
-const APP_VERSION = "0.8.3";
-const APP_BUILD = "redirect-helper";
+const APP_VERSION = "0.8.4";
+const APP_BUILD = "playlist-proof";
 const RECENT_MONTHS = 6;
 const SPOTIFY_SEARCH_BATCH_SIZE = 2;
 const SPOTIFY_REQUEST_TIMEOUT_MS = 8_000;
@@ -20,11 +20,11 @@ const KOREA_TOP_PLAYLIST_IDS = [
 ];
 const QUIZ_PLAYLISTS = [
   {
-    id: "0C5dTANYJbiVOY5yALyUgy",
+    fallbackId: "0C5dTANYJbiVOY5yALyUgy",
     name: "랜덤퀴즈 신곡",
   },
   {
-    id: "2hGCc3iEBj1KwS8gEoNHKZ",
+    fallbackId: "2hGCc3iEBj1KwS8gEoNHKZ",
     name: "랜덤퀴즈 Top100",
   },
 ];
@@ -583,12 +583,24 @@ function readSettings() {
 }
 
 function getSelectedPlaylistId() {
-  return document.querySelector("input[name='quizPlaylist']:checked")?.value || QUIZ_PLAYLISTS[0].id;
+  return (
+    document.querySelector("input[name='quizPlaylist']:checked")?.value ||
+    QUIZ_PLAYLISTS[0].fallbackId
+  );
 }
 
 function getSelectedPlaylistName() {
+  return getSelectedPlaylistConfig().name;
+}
+
+function getSelectedPlaylistConfig() {
   const playlistId = getSelectedPlaylistId();
-  return QUIZ_PLAYLISTS.find((playlist) => playlist.id === playlistId)?.name || "선택한 플레이리스트";
+  return (
+    QUIZ_PLAYLISTS.find((playlist) => playlist.fallbackId === playlistId) || {
+      fallbackId: playlistId,
+      name: "선택한 플레이리스트",
+    }
+  );
 }
 
 function getSelectedCategories() {
@@ -618,13 +630,12 @@ async function buildSpotifyQueue(settings) {
   appendHarnessLog(`플레이리스트 후보 불러오기: ${settings.playlistName}`);
 
   const targetCandidateCount = Math.max(settings.songCount * 3, settings.songCount + 3);
-  const candidates = settings.playlistId
-    ? await fetchOwnedPlaylistCandidates(settings.playlistId, settings.playlistName)
-    : await fetchSpotifyCandidates(
-        settings.selectedCategories,
-        settings.dateFilter,
-        targetCandidateCount,
-      );
+  const selectedPlaylist = settings.playlistId
+    ? await resolveOwnedPlaylist(settings.playlistId, settings.playlistName)
+    : null;
+  const candidates = selectedPlaylist
+    ? await fetchOwnedPlaylistCandidates(selectedPlaylist)
+    : await fetchSpotifyCandidates(settings.selectedCategories, settings.dateFilter, targetCandidateCount);
   const shuffled = shuffleList(candidates);
 
   if (shuffled.length === 0) {
@@ -636,9 +647,14 @@ async function buildSpotifyQueue(settings) {
   const artistCount = new Set(queue.map(getPrimaryArtistKeyFromTrack).filter(Boolean)).size;
   const shortageMessage =
     queue.length < settings.songCount ? ` 요청한 ${settings.songCount}곡 중 ${queue.length}곡만 재생합니다.` : "";
+  const sourceName = selectedPlaylist ? formatPlaylistSource(selectedPlaylist) : settings.playlistName;
+  const sampleMessage =
+    selectedPlaylist?.sampleTracks?.length > 0
+      ? ` 앞 곡: ${selectedPlaylist.sampleTracks.join(" / ")}.`
+      : "";
 
-  appendHarnessLog(`${settings.playlistName} 후보 ${candidates.length}곡 중 ${queue.length}곡 선택, 가수 ${artistCount}명`);
-  sourceStatus.textContent = `${settings.playlistName} 후보 ${candidates.length}곡을 불러왔습니다.${shortageMessage} 첫 곡을 준비합니다.`;
+  appendHarnessLog(`${sourceName} 후보 ${candidates.length}곡 중 ${queue.length}곡 선택, 가수 ${artistCount}명`);
+  sourceStatus.textContent = `${sourceName} 후보 ${candidates.length}곡을 불러왔습니다.${sampleMessage}${shortageMessage} 첫 곡을 준비합니다.`;
   return queue;
 }
 
@@ -717,16 +733,98 @@ function rememberRecentQueue(queue) {
   ].slice(0, RECENT_QUEUE_HISTORY_LIMIT);
 }
 
-async function fetchOwnedPlaylistCandidates(playlistId, playlistName) {
+async function resolveOwnedPlaylist(fallbackId, playlistName) {
   const token = await getSpotifyAccessToken();
-  const items = await fetchPlaylistTrackItems(playlistId, token);
-  appendHarnessLog(`${playlistName} 원본 ${items.length}곡 조회`);
+  const userPlaylists = await fetchCurrentUserPlaylists(token);
+  const normalizedTargetName = normalizePlaylistName(playlistName);
+  const exactMatches = userPlaylists.filter(
+    (playlist) => normalizePlaylistName(playlist.name) === normalizedTargetName,
+  );
+  const resolvedPlaylist = exactMatches[0];
+
+  if (!resolvedPlaylist) {
+    appendHarnessLog(`${playlistName} 이름 매칭 실패, 저장된 ID로 조회: ${fallbackId}`);
+    return {
+      id: fallbackId,
+      name: playlistName,
+      ownerName: "저장된 플레이리스트",
+      total: null,
+      isFallback: true,
+      token,
+    };
+  }
+
+  if (resolvedPlaylist.id !== fallbackId) {
+    appendHarnessLog(
+      `${playlistName} ID 갱신 감지: ${fallbackId} 대신 ${resolvedPlaylist.id} 사용`,
+    );
+  }
+
+  return {
+    id: resolvedPlaylist.id,
+    name: resolvedPlaylist.name,
+    ownerName: resolvedPlaylist.owner?.display_name || resolvedPlaylist.owner?.id || "내 라이브러리",
+    total: resolvedPlaylist.tracks?.total ?? null,
+    isFallback: false,
+    token,
+  };
+}
+
+async function fetchCurrentUserPlaylists(token) {
+  const playlists = [];
+
+  for (let offset = 0; offset < 500; offset += 50) {
+    const params = new URLSearchParams({
+      limit: "50",
+      offset: String(offset),
+    });
+    const data = await spotifyApiFetch(`https://api.spotify.com/v1/me/playlists?${params}`, {
+      token,
+    });
+
+    playlists.push(...(data.items || []));
+
+    if (!data.next) {
+      break;
+    }
+  }
+
+  return playlists;
+}
+
+function normalizePlaylistName(name) {
+  return String(name || "").normalize("NFKC").trim().toLowerCase();
+}
+
+function formatPlaylistSource(playlist) {
+  const ownerLabel = playlist.ownerName ? ` · ${playlist.ownerName}` : "";
+  const countLabel = Number.isFinite(playlist.total) ? ` · ${playlist.total}곡` : "";
+  return `${playlist.name}${ownerLabel}${countLabel}`;
+}
+
+async function fetchOwnedPlaylistCandidates(playlist) {
+  const items = await fetchPlaylistTrackItems(playlist.id, playlist.token);
+  const sampleTracks = items.slice(0, 5).map(formatSpotifyItemShort);
+  playlist.sampleTracks = sampleTracks;
+
+  appendHarnessLog(`${formatPlaylistSource(playlist)} 원본 ${items.length}곡 조회`);
+
+  if (sampleTracks.length > 0) {
+    appendHarnessLog(`플레이리스트 앞 곡: ${sampleTracks.join(" / ")}`);
+    sourceStatus.textContent = `${formatPlaylistSource(playlist)}에서 ${items.length}곡을 읽었습니다. 앞 곡: ${sampleTracks.join(" / ")}`;
+  }
+
   const playableItems = mergeSpotifyItems(items)
     .filter((item) => item.is_playable !== false)
     .filter((item) => !isLikelyAlternateVersion(item));
 
-  appendHarnessLog(`${playlistName}에서 재생 가능한 후보 ${playableItems.length}곡 확보`);
-  return playableItems.map((item) => spotifyItemToQuizTrack(item, [playlistName]));
+  appendHarnessLog(`${formatPlaylistSource(playlist)}에서 재생 가능한 후보 ${playableItems.length}곡 확보`);
+  return playableItems.map((item) => spotifyItemToQuizTrack(item, [playlist.name]));
+}
+
+function formatSpotifyItemShort(item) {
+  const artist = item.artists?.[0]?.name;
+  return artist ? `${item.name} - ${artist}` : item.name;
 }
 
 async function fetchPlaylistTrackItems(playlistId, token) {

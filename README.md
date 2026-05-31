@@ -30,6 +30,7 @@ https://libertier85.github.io/random-music-quiz/
 앱 화면의 Spotify Client ID 칸에 Client ID를 붙여넣고 저장한 뒤 Spotify 로그인을 진행합니다.
 앱 화면의 "현재 Redirect URI"에 표시되는 값을 Dashboard에 그대로 추가하면 가장 안전합니다.
 Client Secret은 사용하지 않습니다.
+퀴즈를 시작하면 Spotify가 실제로 읽은 플레이리스트 이름, 소유자, 앞 곡들이 화면에 표시됩니다.
 
 ## 집 밖에서 사용
 
@@ -53,4 +54,4 @@ node qa-smoke.mjs
 
 ## 현재 버전
 
-`v0.8.3 · redirect-helper`
+`v0.8.4 · playlist-proof`

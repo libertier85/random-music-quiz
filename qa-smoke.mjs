@@ -86,5 +86,7 @@ assert(
 );
 assert(app.includes("playFullResultTrack"), "Finished quiz must support full-track replay");
 assert(app.includes("copySpotifyRedirectUri"), "Spotify redirect URI must be easy to copy");
+assert(app.includes("resolveOwnedPlaylist"), "Playlist selection must resolve owned playlists by name");
+assert(app.includes("formatPlaylistSource"), "Playlist source proof should be shown to users");
 
 console.log(`QA smoke passed: v${version} · ${build}`);
